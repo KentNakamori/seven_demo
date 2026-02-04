@@ -1,0 +1,106 @@
+# ============================================================
+# セブン銀行 校閲ルール（補助・テキスト検索用）
+#
+# 参照画像（references/）でカバーしにくいテキストベースの
+# チェックを定義するファイルです。
+# ルールを追加したい場合はこのファイルに追記してください。
+# ============================================================
+
+# ===== ワーディング（禁止語・推奨語・表記ゆれ） =====
+wording:
+
+  # --- 禁止語 ---
+  - id: W001
+    type: banned_word
+    pattern: "お得"
+    message: "「お得」は景表法リスクあり。「おトク」等への変更を検討"
+    severity: Warning
+
+  - id: W002
+    type: banned_word
+    pattern: "絶対"
+    message: "「絶対」は断定表現のため使用禁止"
+    severity: Fail
+
+  - id: W003
+    type: banned_word
+    pattern: "当行"
+    message: "「当行」は使用しない（他行との並列時のみ「自行」を使用）"
+    severity: Fail
+
+  - id: W004
+    type: banned_word
+    pattern: "必ず儲かる"
+    message: "断定的な利益保証表現は景表法違反のおそれ"
+    severity: Fail
+
+  - id: W005
+    type: banned_word
+    pattern: "業界No\\.?1"
+    message: "根拠のない最上級表現は景表法リスクあり"
+    severity: Warning
+
+  # --- 表記ゆれ（送り仮名等） ---
+  - id: W010
+    type: preferred_word
+    wrong: "引落し"
+    correct: "引き落とし"
+    message: "送り仮名の表記ゆれ。「引き落とし」に統一"
+    severity: Warning
+
+  - id: W011
+    type: preferred_word
+    wrong: "受取り"
+    correct: "受け取り"
+    message: "送り仮名の表記ゆれ。「受け取り」に統一"
+    severity: Warning
+
+  - id: W012
+    type: preferred_word
+    wrong: "引出し"
+    correct: "引き出し"
+    message: "送り仮名の表記ゆれ。「引き出し」に統一"
+    severity: Warning
+
+  - id: W013
+    type: preferred_word
+    wrong: "取消し"
+    correct: "取り消し"
+    message: "送り仮名の表記ゆれ。「取り消し」に統一"
+    severity: Warning
+
+  - id: W014
+    type: preferred_word
+    wrong: "申込み"
+    correct: "申し込み"
+    message: "送り仮名の表記ゆれ。「申し込み」に統一"
+    severity: Warning
+
+  - id: W015
+    type: preferred_word
+    wrong: "受付け"
+    correct: "受け付け"
+    message: "送り仮名の表記ゆれ。「受け付け」に統一"
+    severity: Warning
+
+# ===== 形式チェック（正規表現ベース） =====
+format:
+
+  - id: F001
+    type: regex_required
+    pattern: "(\\d{4}年\\d{1,2}月\\d{1,2}日|\\d{4}/\\d{1,2}/\\d{1,2})"
+    message: "キャンペーン期間の日付表記がありません"
+    severity: Warning
+    note: "キャンペーン告知物の場合のみ適用。YYYY年M月D日 または YYYY/M/D 形式を許容"
+
+  - id: F002
+    type: regex_required
+    pattern: "(注意事項|免責|※)"
+    message: "注意書き・免責文言が見当たりません"
+    severity: Warning
+
+  - id: F003
+    type: regex_format
+    pattern: "\\d{1,3}(,\\d{3})*円"
+    message: "金額表記はカンマ区切り＋円の形式を推奨（例：1,000円）"
+    severity: Info
