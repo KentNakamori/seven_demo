@@ -1,17 +1,17 @@
 """
-セブン銀行 AI校閲支援ツール（デモ版）
+セブン銀行 AI校閲支援ツール（デモ版）- 分割並列処理版
 
 Streamlit アプリ本体。
-ファイルアップロード → Gemini API で校閲 → レポート表示。
+ファイルアップロード → Gemini API で並列校閲 → レポート表示。
 """
 
 import streamlit as st
 from PIL import Image
 from dotenv import load_dotenv
 
-from api_client import configure_api, run_proofread, REFERENCE_FILES, REFERENCES_DIR
-from prompt_builder import build_prompt
-from report_generator import parse_report, wrap_report, generate_filename
+from api_client import configure_api, run_proofread_parallel, CHECK_CONFIGS
+from prompt_builder import build_prompts_for_parallel
+from report_generator import merge_results, generate_markdown_report, generate_filename
 
 # .env 読み込み
 load_dotenv()
@@ -135,6 +135,23 @@ st.markdown("""
     border-radius: 12px;
     text-align: center;
 }
+
+/* エラーカード */
+.error-card {
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    background-color: #fef2f2;
+    border-left: 4px solid #ef4444;
+}
+
+/* 進捗表示 */
+.progress-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -142,9 +159,10 @@ st.markdown("""
 with st.sidebar:
     st.header("⚙ 設定")
 
-    st.subheader("参照ファイル一覧")
-    for fname in REFERENCE_FILES:
-        st.text(f"・{fname}")
+    st.subheader("チェックカテゴリ")
+    for cat, config in CHECK_CONFIGS.items():
+        ref_count = len(config["files"])
+        st.text(f"・{config['name']}（参照画像{ref_count}枚）")
 
     st.subheader("ルールファイル")
     st.text("・rules/rules.yaml")
@@ -162,10 +180,12 @@ with st.sidebar:
     st.divider()
 
     # 詳細表示オプション
-    show_raw = st.checkbox("生のMarkdownも表示", value=False)
+    show_raw = st.checkbox("生のJSONレスポンスも表示", value=False)
 
 # --- メインエリア ---
 st.title("📋 セブン銀行 AI校閲支援ツール（デモ）")
+
+st.caption("🚀 分割並列処理版 - 各チェックカテゴリを個別に実行して精度向上")
 
 # ファイルアップロード
 uploaded_file = st.file_uploader(
@@ -199,12 +219,6 @@ if st.button("▶ 校閲を実行", type="primary", disabled=uploaded_file is No
         st.error(f"❌ API設定エラー: {e}")
         st.stop()
 
-    # 参照画像の存在チェック
-    for fname in REFERENCE_FILES:
-        if not (REFERENCES_DIR / fname).exists():
-            st.error(f"❌ 参照画像が見つかりません: references/{fname}")
-            st.stop()
-
     check_items = {
         "atm": chk_atm,
         "logo": chk_logo,
@@ -212,24 +226,42 @@ if st.button("▶ 校閲を実行", type="primary", disabled=uploaded_file is No
         "format": chk_format,
     }
 
-    prompt_text = build_prompt(check_items)
+    # 有効なチェック数をカウント
+    active_checks = sum(1 for v in check_items.values() if v)
+    if active_checks == 0:
+        st.warning("⚠️ 少なくとも1つのチェック項目を選択してください")
+        st.stop()
+
+    # プロンプト生成
+    prompts = build_prompts_for_parallel()
     image = Image.open(uploaded_file)
 
-    with st.spinner("🔍 校閲を実行中... Gemini API に問い合わせています"):
-        try:
-            result_text = run_proofread(
-                target_image=image,
-                prompt_text=prompt_text,
-                model_name=model_name,
-            )
-        except Exception as e:
-            st.error(f"❌ API呼び出しエラー: {e}")
-            st.stop()
+    # 進捗表示
+    progress_placeholder = st.empty()
+    with progress_placeholder.container():
+        st.info(f"🔍 校閲を実行中... {active_checks}カテゴリを並列処理しています")
+        progress_bar = st.progress(0)
 
-    # レポートをパース
-    report = parse_report(result_text)
+    try:
+        # 並列処理実行
+        check_results = run_proofread_parallel(
+            target_image=image,
+            prompts=prompts,
+            model_name=model_name,
+            check_items=check_items,
+        )
+        progress_bar.progress(100)
+    except Exception as e:
+        st.error(f"❌ API呼び出しエラー: {e}")
+        st.stop()
 
-    # --- 結果表示（ポップアップ風モーダル） ---
+    # 進捗表示をクリア
+    progress_placeholder.empty()
+
+    # 結果をマージ
+    report = merge_results(check_results)
+
+    # --- 結果表示 ---
     st.divider()
 
     # 結果ヘッダー
@@ -287,24 +319,30 @@ if st.button("▶ 校閲を実行", type="primary", disabled=uploaded_file is No
     st.subheader("指摘詳細")
 
     section_icons = {
-        "ATM画像チェック": "🏧",
-        "ロゴチェック": "🎨",
-        "表記・ワーディングチェック": "📝",
-        "形式チェック": "📋",
+        "atm": "🏧",
+        "logo": "🎨",
+        "wording": "📝",
+        "format": "📋",
     }
 
     for section in report.sections:
-        icon = section_icons.get(section.title, "📌")
+        icon = section_icons.get(section.category, "📌")
 
-        with st.expander(f"{icon} {section.title}", expanded=not section.is_na):
-            if section.is_na:
+        # セクションに問題があるか判定
+        has_issues = len(section.issues) > 0 or section.error is not None
+
+        with st.expander(f"{icon} {section.title}", expanded=has_issues):
+            if section.error:
+                st.markdown(f"""
+                <div class="error-card">
+                    ⚠️ <strong>エラー:</strong> {section.error}
+                </div>
+                """, unsafe_allow_html=True)
+            elif not section.has_target:
                 st.info("該当なし - このカテゴリのチェック対象はありませんでした")
             elif not section.issues:
                 st.success("✅ 問題なし - このカテゴリで指摘事項はありませんでした")
             else:
-                if section.reference:
-                    st.caption(f"参照: {section.reference}")
-
                 for issue in section.issues:
                     severity_lower = issue.severity.lower()
                     badge_class = f"badge-{severity_lower}"
@@ -341,22 +379,21 @@ if st.button("▶ 校閲を実行", type="primary", disabled=uploaded_file is No
             </div>
             """, unsafe_allow_html=True)
 
-    # --- 備考 ---
-    if report.notes:
-        with st.expander("📝 備考", expanded=False):
-            for note in report.notes:
-                st.markdown(f"- {note}")
-
-    # --- 生のMarkdown表示（オプション） ---
+    # --- 生のJSONレスポンス表示（オプション） ---
     if show_raw:
-        with st.expander("📄 生のMarkdownレポート", expanded=False):
-            st.markdown(result_text)
+        with st.expander("📄 生のAPIレスポンス（デバッグ用）", expanded=False):
+            for result in report.raw_results:
+                st.markdown(f"### {result.name}")
+                if result.success:
+                    st.code(result.result_text, language="json")
+                else:
+                    st.error(f"エラー: {result.error}")
 
     # --- ダウンロード ---
     st.divider()
     col1, col2 = st.columns([3, 1])
     with col2:
-        download_content = wrap_report(result_text, uploaded_file.name)
+        download_content = generate_markdown_report(report, uploaded_file.name)
         download_filename = generate_filename(uploaded_file.name)
         st.download_button(
             label="📥 レポートをダウンロード",
