@@ -221,7 +221,7 @@ def run_proofread_parallel(
     total_start = time.time()
     print(f"\n=== 並列処理開始 ({len(active_categories)}カテゴリ) ===")
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=6) as executor:
         futures = {
             executor.submit(
                 _run_single_check,
@@ -264,6 +264,58 @@ def run_proofread_parallel(
     results.sort(key=lambda r: category_order.index(r.category) if r.category in category_order else 99)
 
     return results
+
+
+def extract_text_from_image(
+    target_image: Image.Image,
+    model_name: str = "gemini-2.5-pro",
+) -> str:
+    """
+    画像からテキストを抽出する（OCR）。
+
+    Parameters
+    ----------
+    target_image : PIL.Image.Image
+        チェック対象の画像
+    model_name : str
+        使用する Gemini モデル名
+
+    Returns
+    -------
+    str
+        抽出されたテキスト
+    """
+    target_resized = _resize_image(target_image.convert("RGB"))
+
+    prompt = """この画像に含まれるすべてのテキストを正確に書き起こしてください。
+
+ルール:
+- 画像内のテキストをそのまま書き起こす
+- レイアウトや配置を考慮して、読みやすい順序で出力
+- 装飾や強調は無視してプレーンテキストで出力
+- 読み取れない部分は [判読不能] と記載
+- テキストがない場合は「テキストなし」と出力
+
+出力形式:
+書き起こしたテキストのみを出力してください。説明や前置きは不要です。
+"""
+
+    try:
+        generation_config = genai.GenerationConfig(
+            temperature=0,
+            top_p=1,
+            top_k=1,
+        )
+
+        model = genai.GenerativeModel(model_name)
+        response = model.generate_content(
+            [target_resized, prompt],
+            generation_config=generation_config,
+            request_options={"timeout": 60},
+        )
+        return response.text
+    except Exception as e:
+        return f"テキスト抽出エラー: {e}"
 
 
 # 後方互換性のため、旧関数も残す（非推奨）

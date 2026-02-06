@@ -63,3 +63,46 @@ def get_additional_rules(type_key: str, partner_key: str) -> list[str]:
         rules.extend(partners[partner_key].get("rules", []))
 
     return rules
+
+
+def save_presets(presets: dict) -> None:
+    """presets.yaml に保存する"""
+    with open(PRESETS_FILE, "w", encoding="utf-8") as f:
+        yaml.dump(presets, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+
+def add_rule(category: str, key: str, rule: str) -> bool:
+    """
+    ルールを追加する。
+
+    Parameters
+    ----------
+    category : str
+        "announcement_types" または "partners"
+    key : str
+        タイプ/提携先のキー（例: "sns_banner", "rakuten"）
+    rule : str
+        追加するルール文字列
+
+    Returns
+    -------
+    bool
+        成功したら True
+    """
+    presets = load_presets()
+
+    if category not in presets:
+        return False
+
+    if key not in presets[category]:
+        return False
+
+    if "rules" not in presets[category][key]:
+        presets[category][key]["rules"] = []
+
+    # 重複チェック
+    if rule not in presets[category][key]["rules"]:
+        presets[category][key]["rules"].append(rule)
+        save_presets(presets)
+
+    return True

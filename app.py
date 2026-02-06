@@ -9,10 +9,10 @@ import streamlit as st
 from PIL import Image
 from dotenv import load_dotenv
 
-from api_client import configure_api, run_proofread_parallel, CHECK_CONFIGS
+from api_client import configure_api, run_proofread_parallel, CHECK_CONFIGS, extract_text_from_image
 from prompt_builder import build_prompts_for_parallel
 from report_generator import merge_results, generate_markdown_report, generate_filename
-from preset_manager import get_announcement_types, get_partners, get_additional_rules
+from preset_manager import get_announcement_types, get_partners, get_additional_rules, add_rule
 
 # .env 読み込み
 load_dotenv()
@@ -321,23 +321,68 @@ st.markdown("""
 <div class="main-header">
     <h1>🏦 セブン銀行 AI校閲支援ツール</h1>
     <p>告知物（ポスター・チラシ・バナー等）をAIが自動で校閲し、VIマニュアル違反をチェックします</p>
-    <span class="header-badge">✨ Powered by Gemini 2.5 Pro</span>
 </div>
 """, unsafe_allow_html=True)
 
-# --- サイドバー ---
-with st.sidebar:
-    st.markdown("### ⚙️ 設定")
+# --- 固定設定 ---
+model_name = "gemini-3-pro-preview"
 
-    model_name = st.selectbox(
-        "AIモデル",
-        ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
-        index=0,
-        help="2.5-pro（推奨）は高精度。Flash系は高速だが精度が低い。"
+
+# --- ルール追加ダイアログ ---
+@st.dialog("📝 ルールを追加")
+def add_rule_dialog():
+    """ルール追加のダイアログ"""
+    # カテゴリ選択
+    category_option = st.radio(
+        "追加先",
+        ["告知物タイプ", "提携先"],
+        horizontal=True,
     )
 
-    st.divider()
+    if category_option == "告知物タイプ":
+        category = "announcement_types"
+        items = get_announcement_types()
+    else:
+        category = "partners"
+        items = get_partners()
 
+    # 項目選択
+    item_keys = list(items.keys())
+    item_names = list(items.values())
+    selected_idx = st.selectbox(
+        "項目",
+        range(len(item_keys)),
+        format_func=lambda i: item_names[i],
+    )
+    selected_key = item_keys[selected_idx]
+
+    # ルール内容入力
+    rule_content = st.text_area(
+        "ルール内容",
+        placeholder="例: 「〇〇」の表記ルールを確認",
+        height=100,
+    )
+
+    # 追加ボタン
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("追加", type="primary", use_container_width=True):
+            if rule_content.strip():
+                success = add_rule(category, selected_key, rule_content.strip())
+                if success:
+                    st.success("✅ ルールを追加しました")
+                    st.rerun()
+                else:
+                    st.error("❌ 追加に失敗しました")
+            else:
+                st.warning("ルール内容を入力してください")
+    with col2:
+        if st.button("閉じる", use_container_width=True):
+            st.rerun()
+
+
+# --- サイドバー ---
+with st.sidebar:
     st.markdown("### 📋 チェックカテゴリ")
     for cat, config in CHECK_CONFIGS.items():
         ref_count = len(config["files"])
@@ -348,7 +393,9 @@ with st.sidebar:
 
     st.divider()
 
-    show_raw = st.checkbox("デバッグ情報を表示", value=False)
+    # ルール追加ボタン
+    if st.button("➕ ルールを追加", use_container_width=True):
+        add_rule_dialog()
 
 # --- メインエリア ---
 col_main, col_side = st.columns([2, 1])
@@ -457,12 +504,28 @@ if run_button:
         progress_bar = st.progress(0)
 
     try:
-        check_results = run_proofread_parallel(
-            target_image=image,
-            prompts=prompts,
-            model_name=model_name,
-            check_items=check_items,
-        )
+        # 並列で校閲とOCRを実行
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            # 校閲タスク
+            proofread_future = executor.submit(
+                run_proofread_parallel,
+                image,
+                prompts,
+                model_name,
+                check_items,
+            )
+            # OCRタスク
+            ocr_future = executor.submit(
+                extract_text_from_image,
+                image,
+                model_name,
+            )
+
+            check_results = proofread_future.result()
+            extracted_text = ocr_future.result()
+
         progress_bar.progress(100)
     except Exception as e:
         st.error(f"❌ API呼び出しエラー: {e}")
@@ -476,6 +539,10 @@ if run_button:
 
     # --- 結果表示 ---
     st.markdown("---")
+
+    # 文字起こし結果
+    with st.expander("📝 文字起こし結果（OCR）", expanded=False):
+        st.text(extracted_text)
 
     # 結果ヘッダー
     total_issues = report.summary["Fail"] + report.summary["Warning"]
@@ -541,16 +608,6 @@ if run_button:
         st.markdown("### 👁️ 目視確認が必要な項目")
         for check in report.visual_checks:
             st.markdown(f'<div class="visual-check">☐ {check}</div>', unsafe_allow_html=True)
-
-    # --- デバッグ情報 ---
-    if show_raw:
-        with st.expander("🔧 デバッグ情報（APIレスポンス）", expanded=False):
-            for result in report.raw_results:
-                st.markdown(f"**{result.name}**")
-                if result.success:
-                    st.code(result.result_text, language="json")
-                else:
-                    st.error(f"エラー: {result.error}")
 
     # --- ダウンロード ---
     st.markdown("")
