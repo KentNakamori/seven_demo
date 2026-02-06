@@ -44,6 +44,16 @@ CHECK_CONFIGS = {
         "files": [],  # 参照画像なし（YAMLルールのみ）
         "captions": [],
     },
+    "color": {
+        "name": "カラーユニバーサルデザイン",
+        "files": [],  # 参照画像なし
+        "captions": [],
+    },
+    "improvement": {
+        "name": "表現改善提案",
+        "files": [],  # 参照画像なし
+        "captions": [],
+    },
 }
 
 MAX_IMAGE_SIZE = 1500
@@ -250,7 +260,7 @@ def run_proofread_parallel(
     print(f"=== 並列処理完了 (合計 {total_elapsed:.1f}秒) ===\n")
 
     # カテゴリ順にソート
-    category_order = ["atm", "logo", "wording", "format"]
+    category_order = ["atm", "logo", "wording", "format", "color", "improvement"]
     results.sort(key=lambda r: category_order.index(r.category) if r.category in category_order else 99)
 
     return results

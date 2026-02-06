@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from api_client import configure_api, run_proofread_parallel, CHECK_CONFIGS
 from prompt_builder import build_prompts_for_parallel
 from report_generator import merge_results, generate_markdown_report, generate_filename
+from preset_manager import get_announcement_types, get_partners, get_additional_rules
 
 # .env 読み込み
 load_dotenv()
@@ -32,6 +33,22 @@ st.markdown("""
 
 * {
     font-family: 'Noto Sans JP', sans-serif;
+}
+
+/* カーソルスタイル */
+button,
+[role="button"],
+.stButton > button,
+.stDownloadButton > button,
+.stSelectbox > div > div,
+.stCheckbox > label,
+.stRadio > label,
+.stFileUploader > div,
+[data-baseweb="select"],
+[data-baseweb="popover"] li,
+summary,
+.streamlit-expanderHeader {
+    cursor: pointer !important;
 }
 
 /* メインコンテナ */
@@ -99,37 +116,16 @@ st.markdown("""
     margin-bottom: 1rem;
 }
 
-/* サマリカード */
+/* サマリカード - シンプル版 */
 .summary-container {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1rem;
+    display: flex;
+    gap: 2rem;
     margin: 1.5rem 0;
+    padding: 1.5rem 0;
+    border-bottom: 1px solid #e5e7eb;
 }
-.summary-card {
-    padding: 1.5rem;
-    border-radius: 16px;
+.summary-item {
     text-align: center;
-    transition: transform 0.2s ease;
-}
-.summary-card:hover {
-    transform: translateY(-2px);
-}
-.summary-fail {
-    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-    border: 1px solid #fecaca;
-}
-.summary-warning {
-    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-    border: 1px solid #fde68a;
-}
-.summary-info {
-    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-    border: 1px solid #bfdbfe;
-}
-.summary-ok {
-    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-    border: 1px solid #bbf7d0;
 }
 .summary-number {
     font-size: 2.5rem;
@@ -137,80 +133,53 @@ st.markdown("""
     margin: 0;
     line-height: 1;
 }
-.summary-fail .summary-number { color: #dc2626; }
-.summary-warning .summary-number { color: #d97706; }
-.summary-info .summary-number { color: #2563eb; }
-.summary-ok .summary-number { color: #16a34a; }
+.summary-number.fail { color: #dc2626; }
+.summary-number.warning { color: #d97706; }
+.summary-number.info { color: #6b7280; }
 .summary-label {
-    font-size: 0.85rem;
-    color: #64748b;
-    margin-top: 0.5rem;
-    font-weight: 500;
+    font-size: 0.8rem;
+    color: #9ca3af;
+    margin-top: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-/* 指摘カード */
+/* 指摘カード - シンプル版 */
 .issue-card {
-    background: white;
-    padding: 1.25rem 1.5rem;
-    border-radius: 12px;
-    margin-bottom: 0.75rem;
-    border-left: 4px solid;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    transition: box-shadow 0.2s ease;
+    padding: 1rem 0;
+    border-bottom: 1px solid #f3f4f6;
 }
-.issue-card:hover {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-.issue-fail {
-    border-left-color: #ef4444;
-    background: linear-gradient(to right, #fef2f2, white);
-}
-.issue-warning {
-    border-left-color: #f59e0b;
-    background: linear-gradient(to right, #fffbeb, white);
-}
-.issue-info {
-    border-left-color: #3b82f6;
-    background: linear-gradient(to right, #eff6ff, white);
+.issue-card:last-child {
+    border-bottom: none;
 }
 .issue-header {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
 }
 .issue-badge {
-    padding: 0.3rem 0.8rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: white;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
 }
-.badge-fail { background: linear-gradient(135deg, #ef4444, #dc2626); }
-.badge-warning { background: linear-gradient(135deg, #f59e0b, #d97706); }
-.badge-info { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+.badge-fail { background: #fee2e2; color: #dc2626; }
+.badge-warning { background: #fef3c7; color: #d97706; }
+.badge-info { background: #e0e7ff; color: #4f46e5; }
 .issue-content {
-    font-size: 1rem;
-    color: #1e293b;
-    margin-bottom: 0.75rem;
-    font-weight: 500;
+    font-size: 0.95rem;
+    color: #1f2937;
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
 }
 .issue-meta {
-    font-size: 0.85rem;
-    color: #64748b;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
+    font-size: 0.8rem;
+    color: #9ca3af;
 }
-.issue-meta-item {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-.issue-meta-label {
-    color: #94a3b8;
+.issue-meta span {
+    margin-right: 1rem;
 }
 
 /* セクションヘッダー */
@@ -234,68 +203,66 @@ st.markdown("""
     margin: 0;
 }
 
-/* 目視確認 */
+/* 目視確認 - シンプル版 */
 .visual-check {
-    padding: 1rem 1.25rem;
-    background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
-    border: 1px solid #fde047;
-    border-radius: 10px;
-    margin-bottom: 0.5rem;
-    color: #854d0e;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
+    padding: 0.75rem 0;
+    color: #92400e;
+    font-size: 0.9rem;
+    border-bottom: 1px solid #fef3c7;
 }
-.visual-check-icon {
-    font-size: 1.2rem;
+.visual-check:last-child {
+    border-bottom: none;
 }
 
-/* 成功メッセージ */
-.success-message {
-    padding: 2rem;
-    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-    border: 2px solid #86efac;
-    border-radius: 16px;
+/* 成功メッセージ - シンプル版 */
+.success-box {
     text-align: center;
+    padding: 3rem 2rem;
 }
-.success-message h2 {
-    color: #166534;
-    font-size: 1.5rem;
-    margin: 0 0 0.5rem 0;
+.success-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
 }
-.success-message p {
-    color: #15803d;
-    margin: 0;
+.success-text {
+    font-size: 1.25rem;
+    color: #059669;
+    font-weight: 600;
 }
-
-/* エラーカード */
-.error-card {
-    padding: 1rem 1.5rem;
-    border-radius: 12px;
-    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-    border: 1px solid #fecaca;
-    color: #991b1b;
+.success-sub {
+    font-size: 0.9rem;
+    color: #6b7280;
+    margin-top: 0.5rem;
 }
 
-/* ボタン */
-.stButton > button {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+/* エラー */
+.error-text {
+    color: #dc2626;
+    font-size: 0.9rem;
+}
+
+/* 実行ボタン */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
     color: white;
     border: none;
-    padding: 0.75rem 2rem;
-    font-size: 1rem;
-    font-weight: 600;
-    border-radius: 10px;
+    padding: 1rem 2.5rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    border-radius: 12px;
     transition: all 0.2s ease;
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
 }
-.stButton > button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+.stButton > button[kind="primary"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
 }
-.stButton > button:active {
+.stButton > button[kind="primary"]:active {
     transform: translateY(0);
+}
+.stButton > button {
+    border-radius: 10px;
+    font-weight: 600;
 }
 
 /* ダウンロードボタン */
@@ -316,15 +283,15 @@ st.markdown("""
 
 /* サイドバー */
 section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+    background: #f8fafc;
 }
 section[data-testid="stSidebar"] .stMarkdown {
-    color: #e2e8f0;
+    color: #334155;
 }
 section[data-testid="stSidebar"] h1,
 section[data-testid="stSidebar"] h2,
 section[data-testid="stSidebar"] h3 {
-    color: white;
+    color: #1e293b;
 }
 
 /* プログレス */
@@ -395,6 +362,42 @@ with col_main:
         label_visibility="collapsed",
     )
 
+    # プリセット選択
+    st.markdown("### 📋 告知物設定")
+    preset_col1, preset_col2 = st.columns(2)
+
+    # 告知物タイプ
+    announcement_types = get_announcement_types()
+    type_keys = list(announcement_types.keys())
+    type_names = list(announcement_types.values())
+    with preset_col1:
+        selected_type_idx = st.selectbox(
+            "告知物タイプ",
+            range(len(type_keys)),
+            format_func=lambda i: type_names[i],
+            index=0,
+        )
+        selected_type = type_keys[selected_type_idx]
+
+    # 提携先
+    partners = get_partners()
+    partner_keys = list(partners.keys())
+    partner_names = list(partners.values())
+    with preset_col2:
+        selected_partner_idx = st.selectbox(
+            "提携先",
+            range(len(partner_keys)),
+            format_func=lambda i: partner_names[i],
+            index=0,
+        )
+        selected_partner = partner_keys[selected_partner_idx]
+
+    # 追加ルール表示
+    additional_rules = get_additional_rules(selected_type, selected_partner)
+    if additional_rules:
+        rules_text = "\n".join([f"・{rule}" for rule in additional_rules])
+        st.info(f"**📋 適用される追加ルール:**\n{rules_text}")
+
 with col_side:
     # チェック項目
     st.markdown("### ✅ チェック項目")
@@ -402,6 +405,9 @@ with col_side:
     chk_logo = st.checkbox("ロゴ（形・色・余白）", value=True)
     chk_wording = st.checkbox("表記・ワーディング", value=True)
     chk_format = st.checkbox("形式（日付・金額）", value=True)
+    st.markdown("#### 🎨 追加チェック")
+    chk_color = st.checkbox("カラーUD（色覚配慮）", value=False)
+    chk_improvement = st.checkbox("表現改善提案", value=False)
 
 # アップロード画像のプレビュー
 if uploaded_file is not None:
@@ -432,6 +438,8 @@ if run_button:
         "logo": chk_logo,
         "wording": chk_wording,
         "format": chk_format,
+        "color": chk_color,
+        "improvement": chk_improvement,
     }
 
     active_checks = sum(1 for v in check_items.values() if v)
@@ -439,7 +447,7 @@ if run_button:
         st.warning("⚠️ 少なくとも1つのチェック項目を選択してください")
         st.stop()
 
-    prompts = build_prompts_for_parallel()
+    prompts = build_prompts_for_parallel(additional_rules=additional_rules)
     image = Image.open(uploaded_file)
 
     # 進捗表示
@@ -473,45 +481,33 @@ if run_button:
     total_issues = report.summary["Fail"] + report.summary["Warning"]
     if total_issues == 0:
         st.markdown("""
-        <div class="success-message">
-            <h2>✅ 校閲完了</h2>
-            <p>問題は見つかりませんでした。すべてのチェック項目をパスしました。</p>
+        <div class="success-box">
+            <div class="success-icon">✓</div>
+            <div class="success-text">校閲完了 - 問題なし</div>
+            <div class="success-sub">すべてのチェック項目をパスしました</div>
         </div>
         """, unsafe_allow_html=True)
     else:
-        st.markdown("## 📊 校閲結果")
-
-    # サマリカード
-    st.markdown(f"""
-    <div class="summary-container">
-        <div class="summary-card {"summary-fail" if report.summary["Fail"] > 0 else "summary-ok"}">
-            <p class="summary-number">{report.summary["Fail"]}</p>
-            <p class="summary-label">❌ Fail（要修正）</p>
+        # サマリ
+        st.markdown(f"""
+        <div class="summary-container">
+            <div class="summary-item">
+                <div class="summary-number fail">{report.summary["Fail"]}</div>
+                <div class="summary-label">Fail</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-number warning">{report.summary["Warning"]}</div>
+                <div class="summary-label">Warning</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-number info">{report.summary["Info"]}</div>
+                <div class="summary-label">Info</div>
+            </div>
         </div>
-        <div class="summary-card {"summary-warning" if report.summary["Warning"] > 0 else "summary-ok"}">
-            <p class="summary-number">{report.summary["Warning"]}</p>
-            <p class="summary-label">⚠️ Warning（要確認）</p>
-        </div>
-        <div class="summary-card summary-info">
-            <p class="summary-number">{report.summary["Info"]}</p>
-            <p class="summary-label">ℹ️ Info（参考）</p>
-        </div>
-        <div class="summary-card summary-ok">
-            <p class="summary-number">{report.summary["Fail"] + report.summary["Warning"] + report.summary["Info"]}</p>
-            <p class="summary-label">📋 合計</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     # --- 指摘一覧 ---
-    st.markdown("### 📝 指摘詳細")
-
-    section_icons = {
-        "atm": "🏧",
-        "logo": "🎨",
-        "wording": "📝",
-        "format": "📋",
-    }
+    section_icons = {"atm": "🏧", "logo": "🎨", "wording": "📝", "format": "📋", "color": "🌈", "improvement": "💡"}
 
     for section in report.sections:
         icon = section_icons.get(section.category, "📌")
@@ -519,47 +515,32 @@ if run_button:
 
         with st.expander(f"{icon} {section.title}", expanded=has_issues):
             if section.error:
-                st.markdown(f"""
-                <div class="error-card">
-                    ⚠️ <strong>エラー:</strong> {section.error}
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f'<div class="error-text">⚠️ {section.error}</div>', unsafe_allow_html=True)
             elif not section.has_target:
-                st.info("📭 該当なし - このカテゴリのチェック対象はありませんでした")
+                st.caption("該当なし")
             elif not section.issues:
-                st.success("✅ 問題なし - このカテゴリで指摘事項はありませんでした")
+                st.caption("✓ 問題なし")
             else:
                 for issue in section.issues:
-                    severity_lower = issue.severity.lower()
-                    badge_class = f"badge-{severity_lower}"
-                    card_class = f"issue-{severity_lower}"
-
+                    sev = issue.severity.lower()
                     st.markdown(f"""
-                    <div class="issue-card {card_class}">
+                    <div class="issue-card">
                         <div class="issue-header">
-                            <span class="issue-badge {badge_class}">{issue.severity}</span>
+                            <span class="issue-badge badge-{sev}">{issue.severity}</span>
                         </div>
                         <div class="issue-content">{issue.content}</div>
                         <div class="issue-meta">
-                            <span class="issue-meta-item"><span class="issue-meta-label">根拠:</span> {issue.basis}</span>
-                            <span class="issue-meta-item"><span class="issue-meta-label">箇所:</span> {issue.location}</span>
-                            <span class="issue-meta-item"><span class="issue-meta-label">対応:</span> {issue.action}</span>
+                            <span>根拠: {issue.basis}</span>
+                            <span>箇所: {issue.location}</span>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
 
     # --- 目視確認リスト ---
     if report.visual_checks:
-        st.markdown("### 👁️ 目視確認リスト")
-        st.caption("以下の項目はAIによる自動判定に限界があります。担当者による確認をお願いします。")
-
+        st.markdown("### 👁️ 目視確認が必要な項目")
         for check in report.visual_checks:
-            st.markdown(f"""
-            <div class="visual-check">
-                <span class="visual-check-icon">☐</span>
-                <span>{check}</span>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f'<div class="visual-check">☐ {check}</div>', unsafe_allow_html=True)
 
     # --- デバッグ情報 ---
     if show_raw:
@@ -572,15 +553,12 @@ if run_button:
                     st.error(f"エラー: {result.error}")
 
     # --- ダウンロード ---
-    st.markdown("---")
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        download_content = generate_markdown_report(report, uploaded_file.name)
-        download_filename = generate_filename(uploaded_file.name)
-        st.download_button(
-            label="📥 レポートをダウンロード",
-            data=download_content,
-            file_name=download_filename,
-            mime="text/markdown",
-            use_container_width=True,
-        )
+    st.markdown("")
+    download_content = generate_markdown_report(report, uploaded_file.name)
+    download_filename = generate_filename(uploaded_file.name)
+    st.download_button(
+        label="📥 レポートをダウンロード",
+        data=download_content,
+        file_name=download_filename,
+        mime="text/markdown",
+    )

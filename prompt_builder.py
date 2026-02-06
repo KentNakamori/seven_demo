@@ -159,7 +159,7 @@ def build_logo_prompt() -> str:
 """ + _build_output_format("ロゴチェック")
 
 
-def build_wording_prompt() -> str:
+def build_wording_prompt(additional_rules: list[str] | None = None) -> str:
     """表記・ワーディングチェック用プロンプト"""
     rules = load_rules()
     wording_rules = rules.get("wording", [])
@@ -179,6 +179,13 @@ def build_wording_prompt() -> str:
     if wording_rules:
         prompt += "\n### 表記ルール\n"
         prompt += _format_wording_rules(wording_rules)
+
+    # 追加ルール（プリセットから）
+    if additional_rules:
+        prompt += "\n### 追加チェック観点（プリセット）\n"
+        prompt += "以下の観点もチェックしてください：\n"
+        for rule in additional_rules:
+            prompt += f"- {rule}\n"
 
     prompt += _build_output_format("表記・ワーディングチェック")
     return prompt
@@ -209,15 +216,71 @@ def build_format_prompt() -> str:
     return prompt
 
 
-def build_prompts_for_parallel() -> dict[str, str]:
+def build_color_prompt() -> str:
+    """カラーユニバーサルデザインチェック用プロンプト"""
+    return _build_common_prefix() + """
+## タスク: カラーユニバーサルデザインチェック
+
+チェック対象画像の色使いについて、色覚多様性への配慮を確認してください。
+
+### チェック観点
+1. **赤と緑の組み合わせ**: 赤緑色覚異常の方には区別しにくい
+2. **色だけで情報を伝えていないか**: 色に加えて形・パターン・テキストで補足されているか
+3. **コントラスト比**: 背景色と文字色の明度差が十分か
+4. **重要情報の視認性**: 重要な情報が色だけに依存していないか
+
+### 判定基準
+- **Warning**: 色覚多様性への配慮が不足している可能性がある箇所
+- **Info**: 改善を推奨する箇所（必須ではないが配慮があるとより良い）
+
+### 注意
+- 画像から色を正確に判定できない場合は「要目視確認」として出力
+- 明らかな問題がない場合は issues を空配列で返す
+""" + _build_output_format("カラーユニバーサルデザイン")
+
+
+def build_improvement_prompt() -> str:
+    """表現改善提案用プロンプト"""
+    return _build_common_prefix() + """
+## タスク: 表現改善提案
+
+チェック対象画像内のテキストを読み取り、より良い表現への改善案を提案してください。
+これは問題点の指摘ではなく、**ポジティブな改善提案**です。
+
+### 提案観点
+1. **わかりやすさ**: 専門用語を平易な言葉に言い換え
+2. **簡潔さ**: 冗長な表現をシンプルに
+3. **訴求力**: より魅力的・効果的な表現への改善
+4. **ユーザー視点**: 読み手にとってより親切な表現
+
+### 出力ルール
+- severity は全て **Info** とする（改善提案であり、問題指摘ではない）
+- content に「現在の表現」と「改善案」を記載
+- 改善案がない場合は issues を空配列で返す
+- **必ず画像内に実在する表現のみを対象とする**
+
+### 出力例
+- content: "「お申し込みはこちら」→「今すぐ申し込む」（行動を促す表現に）"
+- content: "「ご利用いただけます」→「使えます」（より簡潔に）"
+""" + _build_output_format("表現改善提案")
+
+
+def build_prompts_for_parallel(additional_rules: list[str] | None = None) -> dict[str, str]:
     """
     並列処理用に、カテゴリごとのプロンプトを辞書で返す。
+
+    Parameters
+    ----------
+    additional_rules : list[str], optional
+        プリセットから取得した追加ルール
     """
     return {
         "atm": build_atm_prompt(),
         "logo": build_logo_prompt(),
-        "wording": build_wording_prompt(),
+        "wording": build_wording_prompt(additional_rules),
         "format": build_format_prompt(),
+        "color": build_color_prompt(),
+        "improvement": build_improvement_prompt(),
     }
 
 
