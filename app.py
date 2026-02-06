@@ -6,8 +6,11 @@ Streamlit アプリ本体。
 """
 
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageFile
 from dotenv import load_dotenv
+
+# 破損した画像ファイルも可能な限り読み込む設定
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 from api_client import configure_api, run_proofread_parallel, CHECK_CONFIGS, extract_text_from_image
 from prompt_builder import build_prompts_for_parallel
@@ -497,6 +500,10 @@ if run_button:
     prompts = build_prompts_for_parallel(additional_rules=additional_rules)
     image = Image.open(uploaded_file)
 
+    # スレッドセーフのため画像をRGBに変換してコピーを作成
+    image_rgb = image.convert("RGB")
+    image_for_ocr = image_rgb.copy()
+
     # 進捗表示
     progress_container = st.container()
     with progress_container:
@@ -511,7 +518,7 @@ if run_button:
             # 校閲タスク
             proofread_future = executor.submit(
                 run_proofread_parallel,
-                image,
+                image_rgb,
                 prompts,
                 model_name,
                 check_items,
@@ -519,7 +526,7 @@ if run_button:
             # OCRタスク
             ocr_future = executor.submit(
                 extract_text_from_image,
-                image,
+                image_for_ocr,
                 model_name,
             )
 

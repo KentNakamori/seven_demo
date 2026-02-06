@@ -12,7 +12,10 @@ from pathlib import Path
 from dataclasses import dataclass
 
 import google.generativeai as genai
-from PIL import Image
+from PIL import Image, ImageFile
+
+# 破損した画像ファイルも可能な限り読み込む
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 REFERENCES_DIR = Path(__file__).parent / "references"
 
